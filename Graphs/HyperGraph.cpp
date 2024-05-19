@@ -35,6 +35,9 @@ HyperGraph::HyperGraph(string const& db_file_path, string const& info_file_path,
                 edge_id++;
             }
             db_file.close();
+            for(auto predicate:predicates){
+                this->predicatesId[predicate.first] = this->predicate_to_id[predicate.second];
+            }
         }else{
             throw FileNotOpenedException(db_file_path);
         }
@@ -51,6 +54,18 @@ HyperGraph::HyperGraph(string const& db_file_path, string const& info_file_path,
 HyperGraph::HyperGraph(UndirectedGraph &graph, HyperGraph &hypergraph_template) {
 
     this->predicate_argument_types = hypergraph_template.predicate_argument_types;
+    int predicate_count=1;
+    // Create a map from predicates to IDs so that the pattern consist of int for later comparisons
+    for(const auto& predicate:predicate_argument_types){
+        if(!has(get_keys(this->predicate_to_id), predicate.first)){
+            this->predicate_to_id[predicate.first] = predicate_count;
+            this->id_to_predicate[predicate_count] = predicate.first;
+            predicate_count++;
+        }
+    }
+    for(auto predicate:predicates){
+        this->predicatesId[predicate.first] = this->predicate_to_id[predicate.second];
+    }
     this->estimated_graph_diameter = graph.get_estimated_diameter();
     for(auto &node : graph.get_nodes()){
         NodeId node_id = node.first;
@@ -106,6 +121,15 @@ void HyperGraph::set_predicate_argument_types_from_file(string const& info_file_
             set<NodeType> arguments_set(relation.arguments.begin(),
                                         relation.arguments.end());
             node_types.merge(arguments_set); // Updating node_types
+        }
+        int predicate_count=1;
+        // Create a map from predicates to IDs so that the pattern consist of int for later comparisons
+        for(const auto& predicate:predicate_argument_types){
+            if(!has(get_keys(this->predicate_to_id), predicate.first)){
+                this->predicate_to_id[predicate.first] = predicate_count;
+                this->id_to_predicate[predicate_count] = predicate.first;
+                predicate_count++;
+            }
         }
         info_file.close();
     }else{
@@ -374,6 +398,61 @@ HyperGraph::HyperGraph(set<NodeId> nodes_subset, HyperGraph &hypergraph_template
 //        throw HyperGraphSizeException();
 //    }
 }
+
+pair<vector<EdgeId>, vector<EdgeId>> HyperGraph::get_unary_binary_edges(NodeId node,
+                                                                        EdgeId incoming_edge,
+                                                                        size_t number_of_random_walks) {
+    vector<EdgeId> unaries;
+    vector<EdgeId> binaries;
+    vector<EdgeId> all_edges = get_memberships(node);
+    for(const auto& edge:all_edges){
+        vector<NodeId> members = get_edge(edge);
+        if(is_unary(predicatesId[edge])){
+            unaries.push_back(edge);
+        }else{
+            if(edge != incoming_edge){
+                binaries.push_back(edge);
+            }
+        }
+    }
+    if(binaries.size()>number_of_random_walks){
+        vector<EdgeId> final_binaries;
+        vector<double> binaries_weights;
+        for(auto edge: binaries){
+            binaries_weights.emplace_back(this->get_edge_weight(edge));
+        }
+        for(int i = 0; i<number_of_random_walks; i++){
+            size_t edge_index = weighted_discrete_distribution(binaries_weights);
+            final_binaries.emplace_back(binaries[edge_index]);
+            binaries.erase(binaries.begin()+edge_index);
+            binaries_weights.erase(binaries_weights.begin()+edge_index);
+        }
+        return {unaries, final_binaries};
+    }
+    return {unaries, binaries};
+}
+
+NodeId HyperGraph::get_next_node(NodeId start, EdgeId edge) {
+    vector<NodeId> members = get_edge(edge);
+    if(start == members[0]){
+        return members[1];
+    }else{
+        return members[0];
+    }
+}
+
+PredicateId HyperGraph::get_predicate_id(EdgeId edge) {
+    return this->predicatesId[edge];
+}
+
+bool HyperGraph::is_unary(PredicateId predicate) {
+    return predicate_argument_types[id_to_predicate[predicate]].size() == 1;
+}
+
+string HyperGraph::get_predicate_from_id(PredicateId predicate) {
+    return this->id_to_predicate[predicate];
+}
+
 
 vector<HyperGraph> construct_hypergraphs_from_files(string db_file_path, string info_file_path, bool safe) {
     vector<HyperGraph> constructed_hypergraphs;

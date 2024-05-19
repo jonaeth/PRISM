@@ -21,12 +21,14 @@
 #include <error.h>
 #include "../Utils/set_utils.h"
 #include "../Utils/vector_utils.h"
+#include "../Utils/fragment_utils.h"
 
 using namespace std;
 class UndirectedGraph;
 using NodeId = size_t;
 using NodeName = string;
 using EdgeId = size_t;
+using PredicateId = size_t;
 using Predicate = string;
 using NodeType = string;
 using UnaryPattern = set<int>;
@@ -41,11 +43,16 @@ private:
     // MEMBERS
     map<EdgeId, vector<NodeId>> edges; // edge_id : list(node_id)
     map<EdgeId, Predicate> predicates; // edge_id : predicate_name
+    map<EdgeId, PredicateId> predicatesId; // edge_id : predicate_name
     // node_id : node_type
     map<NodeId, vector<EdgeId>> memberships; // node_id : list(edge_id)
     // set(node_type)
     size_t estimated_graph_diameter{0};
     map<NodeId, bool> is_source_node; // node_id : bool
+    map<Predicate,int> predicate_to_id;
+    map<int,Predicate> id_to_predicate;
+    map<vector<PredicateId>, set<vector<NodeId>>> fragments_count;
+    map<vector<PredicateId>, set<vector<NodeId>>> cyclic_fragments_count;
 
     //METHODS
     void set_predicate_argument_types_from_file(string const& info_file_path, bool safe);
@@ -92,6 +99,7 @@ public:
     map<EdgeId, Predicate> get_predicates();
     set<NodeType> get_node_types();
     map<NodeId, vector<EdgeId>> get_memberships();
+    PredicateId get_predicate_id(EdgeId edge);
     vector<EdgeId> get_memberships(NodeId node_id);
     size_t number_of_nodes(); //Number of nodes
     size_t number_of_edges(); //Number of edges
@@ -107,7 +115,10 @@ public:
     void print();
     vector<set<NodeId>> find_unconnected_components();
     set<NodeId> dfs(NodeId source_node);
-
+    bool is_unary(PredicateId predicate);
+    string get_predicate_from_id(PredicateId predicate);
+    pair<vector<size_t>, vector<size_t>> get_unary_binary_edges(NodeId node, EdgeId incoming_edge, size_t number_of_random_walks);
+    NodeId get_next_node(NodeId start, EdgeId edge);
 //    void find_paths(map<vector<UnaryPattern>,vector<UnaryPattern>> &unary_patterns,
 //                    map<vector<UnaryPattern>,vector<vector<UnaryPattern>>> &binary_patterns,
 //                    map<vector<UnaryPattern>,vector<vector<UnaryPattern>>> &ternary_patterns,
